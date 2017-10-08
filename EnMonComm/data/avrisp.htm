@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body >
+      <script>
+
+        window.onload = function() {
+          
+          var ip;
+          var xh = new XMLHttpRequest();
+            xh.onreadystatechange = function(){
+              if (xh.readyState == 4){
+                if(xh.status == 200) {
+                    var res = JSON.parse(xh.responseText);
+                    ip = res.ip;
+                    
+                } 
+              }
+            };
+            xh.open("GET", "/allall", true);
+            xh.send(null);      
+
+          };
+      
+    </script>
+    <h2>On Linux:</h2>
+    On linux you can use direclty network port like this: avrdude -c arduino -p device -P net:ip_address:328 -t or -U ...
+    <h2>On Windows:</h2>
+    On Windows you need to creat virtual COM port and connect it to the network port like this:<br>
+    <img src="capture1.png"><br>
+    <img src="capture2.png"><br>
+    Then use avrdude like with normal serial COM port
+    
+
+</body>
+</html>

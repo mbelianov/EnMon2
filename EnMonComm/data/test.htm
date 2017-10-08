@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css">
+<script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
+<script src="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+
+<style>
+table {
+	width:100%;
+    border-collapse: collapse;
+}
+
+table, th, td {
+    border: 0px solid black;
+}
+
+td {
+	width: 50%
+}
+
+</style>
+
+<script>
+
+function Start(){
+		readCurrentTime();
+		getOperationMode();
+		getSchedule();
+	}
+	
+function getOperationMode(){
+		nocache = "?nocache=" + Math.random() * 1000000;
+		var request = new XMLHttpRequest();
+		
+		request.onreadystatechange = function()
+			{
+				
+				if (this.readyState == 4) {
+					if (this.status == 200) {
+						if (this.responseXML != null) {
+							if (this.responseXML.getElementsByTagName('automode')[0].childNodes[0].nodeValue == "disabled")
+								document.getElementById("automode").innerHTML = "<b>Off</b>";
+							else
+								document.getElementById("automode").innerHTML = "<b>On</b>";
+								
+						}
+						else{
+						//XMLHttpRequest response == null
+						}
+						
+					}
+					else{
+					//XMLHttpRequest status != 200
+						document.getElementById("automode").innerHTML = "<b><Error: bad response from WRS></b>";
+					}
+				}
+				
+			}
+			
+			request.open("GET", "isAutoModeEnabled"  + nocache, true);
+			request.send(null);
+			//timer = setTimeout('isAutoModeEnalbed()', 2000);
+		
+		
+	}	
+
+function readCurrentTime(){
+		nocache = "?nocache=" + Math.random() * 1000000;
+		var request = new XMLHttpRequest();
+		
+		request.onreadystatechange = function()
+			{
+				
+				if (this.readyState == 4) {
+					if (this.status == 200) {
+						if (this.responseXML != null) {
+							
+								document.getElementById("time").innerHTML = "<b>"+ 
+									this.responseXML.getElementsByTagName('time')[0].childNodes[0].nodeValue+
+									"</b>";
+						}
+						else{
+						//XMLHttpRequest response == null
+						}
+						
+					}
+					else{
+					//XMLHttpRequest status != 200
+						document.getElementById("time").innerHTML = "<b><Error: bad response from WRS></b>";
+					}
+				}
+				
+			}
+			
+			request.open("GET", "getCurrentTime"  + nocache, true);
+			request.send(null);
+			timer = setTimeout('readCurrentTime()', 2000);
+		
+		
+	}
+	
+function turnItOn(){
+	var request = new XMLHttpRequest();
+	request.open("GET", "/on", true);
+	request.send(null);
+}
+
+function turnItOff(){
+	var request = new XMLHttpRequest();
+	request.open("GET", "/off", true);
+	request.send(null);
+}
+
+function changeOpMode(){
+	var str = "";
+	
+	if (document.getElementById("automode").innerHTML == "<b>On</b>")
+		str = "/enableAutoMode";
+	else 
+		str = "/enableAutoMode?automode=enable";
+	
+	var request = new XMLHttpRequest();
+	request.open("GET", str, true);
+	request.onreadystatechange = function()
+			{
+				
+				if (this.readyState == 4) {
+					if (this.status == 200) {
+						getOperationMode();
+					}	
+				}
+				
+			}
+	request.send(null);
+}
+	
+function getSchedule(){
+		nocache = "?nocache=" + Math.random() * 1000000;
+		var request = new XMLHttpRequest();
+		
+		request.onreadystatechange = function()
+			{
+				
+				if (this.readyState == 4) {
+					if (this.status == 200) {
+						if (this.responseXML != null) {
+							document.getElementById("ontime").innerHTML = "<b>" + this.responseXML.getElementsByTagName('ontime')[0].childNodes[0].nodeValue + "</b>";
+							document.getElementById("offtime").innerHTML = "<b>" + this.responseXML.getElementsByTagName('offtime')[0].childNodes[0].nodeValue + "</b>";								
+						}
+						else{
+						//XMLHttpRequest response == null
+						}
+						
+					}
+					else{
+					//XMLHttpRequest status != 200
+						//document.getElementById("automode").innerHTML = "<b><Error: bad response from WRS></b>";
+					}
+				}
+				
+			}
+			
+			request.open("GET", "/getSchedule"  + nocache, true);
+			request.send(null);
+			//timer = setTimeout('isAutoModeEnalbed()', 2000);
+		
+		
+	}		
+
+function onSubmitOffTime(){
+	var hour = parseInt(document.getElementById("offTimeHour").value);
+	var minutes = parseInt(document.getElementById("offTimeMin").value);
+	
+	if (hour >= 0 && hour <= 23 && minutes >= 0 && minutes <=59 ){
+		var str = "/setOffTime?hour="+hour+"&minutes=" + minutes;
+		var request = new XMLHttpRequest();
+		request.open("GET", str, true);
+		request.onreadystatechange = function()
+				{
+					
+					if (this.readyState == 4) {
+						if (this.status == 200) {
+							getSchedule();
+							$("#offTimePopup").popup( "close" );;
+						}	
+					}
+					
+				}
+		request.send(null);	
+		
+		
+	}
+	else
+		alert ("pls enter correct time!")
+
+}
+
+function onSubmitOnTime(){
+	var hour = parseInt(document.getElementById("onTimeHour").value);
+	var minutes = parseInt(document.getElementById("onTimeMin").value);
+	
+	if (hour >= 0 && hour <= 23 && minutes >= 0 && minutes <=59 ){
+		var str = "/setOnTime?hour="+hour+"&minutes=" + minutes;
+		var request = new XMLHttpRequest();
+		request.open("GET", str, true);
+		request.onreadystatechange = function()
+				{
+					
+					if (this.readyState == 4) {
+						if (this.status == 200) {
+							getSchedule();
+							$("#onTimePopup").popup( "close" );;
+						}	
+					}
+					
+				}
+		request.send(null);	
+		
+		
+	}
+	else
+		alert ("pls enter correct time!")
+
+}
+
+</script>
+</head>
+<body onload="Start()">
+<table>
+<tr>
+	<td>Time is: <span id="time"></span></td>
+	<td>Auto mode: <span id="automode"></span> <a href="#" onclick="changeOpMode()"> Change</a></td>
+</tr>
+<tr>
+    <td><button class="on_off_button" onclick="turnItOn()">On</button></td>
+	<td><button class="on_off_button" onclick="turnItOff()">Off</button></td>
+</tr>
+<tr>
+	<td>
+		On time: <span id="ontime"></span>
+		<a href="#onTimePopup" data-rel="popup" >Change</a>
+		<div data-role="popup" id="onTimePopup" class="ui-content" style="min-width:250px;">
+		  <form >
+			<div>
+			  <h3>Enter OnTime</h3>
+			  Hour:
+			  <input type="number" id="onTimeHour" min="0" max="23">
+			  Minutes:
+			  <input type="number" id="onTimeMin" min="0" max="59">
+			  
+			  <input type="button" onclick="onSubmitOnTime()" value="Submit">
+			</div>
+		  </form>
+		</div>
+
+
+</td>
+	
+</tr>
+<tr>
+	<td>
+		Off time: <span id="offtime"></span>
+		<a href="#offTimePopup" data-rel="popup" >Change</a>
+		<div data-role="popup" id="offTimePopup" class="ui-content" style="min-width:250px;">
+		  <form >
+			<div>
+			  <h3>Enter OffTime</h3>
+			  Hour:
+			  <input type="number" id="offTimeHour" name="hour" min="0" max="23">
+			  Minutes:
+			  <input type="number" id="offTimeMin" name="minutes" min="0" max="59">
+			  <input type="button" onclick="onSubmitOffTime()" value="Submit">
+			  
+			</div>
+		  </form>
+		</div>
+
+
+</td>
+	
+</tr>
+</table>
+</body>
+</html>

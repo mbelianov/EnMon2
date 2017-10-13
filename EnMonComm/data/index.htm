@@ -1,12 +1,143 @@
-<!DOCTYPE html>
+<!doctype html>
+
 <html>
+
 <head>
-
-
+    <title>Electricity power consumption monitor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.bundle.min.js"></script>
+    
+    <style>
+    canvas{
+        -moz-user-select: none;
+        -webkit-user-select: none;
+        -ms-user-select: none;
+    }
+    </style>
 </head>
-<body >
-<a href="line.htm">Click here to see current power consumption graph</a>
-<br><br><br><br>
-<a href="avrisp.htm">Click here for instructions how to update SVR sketch</a>
+
+<body>
+    <p style="font-size:40px; text-align:center">Current Power Consumption</p>
+    <p style="text-align:center"><span id="digit" style="font-size:80px">0</span><span style="font-size:30px"> KW</span></p>
+    <div style="width:100%;">
+        <canvas id="canvas2"></canvas>
+    </div>
+    Samples to show: <input type="number" id="samples-to-show"/>
+    <input type="button" id="update-button" value="update"/>
+    
+    <script>
+        var dig;
+        var reloadPeriod = 1500;
+        var maxLinePoints = 160;
+        var running = true;
+        var config2 = {
+          type: 'line',
+          data: {
+            labels: [],
+            datasets: [{
+              label: "phase1",
+              backgroundColor: 'red',
+              borderColor: 'red',
+              data: [],
+              fill: false,
+            },{
+              label: "phase2",
+              backgroundColor: 'green',
+              borderColor: 'green',
+              data: [],
+              fill: false,
+            },{
+              label: "phase3",
+              backgroundColor: 'blue',
+              borderColor: 'blue',
+              data: [],
+              fill: false,
+            }]
+          },
+          options: {
+            responsive: true,
+            title: {
+              display:true,
+              text:'Power consumption graph'
+            },
+            tooltips :{
+              mode: 'nearest',
+              intersect: false,
+            },
+            hover: {
+              mode: 'nearest', 
+              intersect: true
+            },
+            scales: {
+              xAxes: [{
+                display: true,
+                scaleLabel: {
+                  display: true,
+                  labelString: 'Time [hh:mm:ss]'
+                }
+              }],
+              yAxes: [{
+                display: true,
+                scaleLabel: {
+                  display: true,
+                  labelString: 'Power Consumption [KW]'
+                }
+              }]
+            }
+          }
+        };
+        
+        
+        function loadValues(){
+            if(!running) return;
+            var xh = new XMLHttpRequest();
+            xh.onreadystatechange = function(){
+              if (xh.readyState == 4){
+                if(xh.status == 200) {
+                    var res = JSON.parse(xh.responseText);
+                    dig.innerHTML = Math.round(100*(res.phase1+res.phase2+res.phase3))/100;
+                    config2.data.labels.push(new Date(res.timestamp*1000).toLocaleTimeString());
+                    config2.data.datasets[0].data.push(res.phase1);
+                    config2.data.datasets[1].data.push(res.phase2);
+                    config2.data.datasets[2].data.push(res.phase3);
+                    while (config2.data.labels.length > maxLinePoints)  
+                          config2.data.labels.shift();
+                    config2.data.datasets.forEach(function(dataset){
+                        while (dataset.data.length > maxLinePoints)  
+                          dataset.data.shift();
+                      });
+                    window.myLine.update();
+                    
+                    if(running) setTimeout(loadValues, reloadPeriod);
+                } else {
+                  setTimeout(loadValues, reloadPeriod);
+                }
+              }
+            };
+            xh.open("GET", "/all", true);
+            xh.send(null);
+        };
+        
+        window.onload = function() {
+            var ctx = document.getElementById("canvas2").getContext("2d");
+            window.myLine = new Chart(ctx, config2);
+            dig = document.getElementById("digit")
+            
+            var samplesInput = document.getElementById("samples-to-show");
+            samplesInput.value = maxLinePoints;
+            
+            var updateButton = document.getElementById("update-button");
+            updateButton.onclick = function(e){
+              var value = parseInt(samplesInput.value);
+              maxLinePoints = (value > 0)?value:60;
+            }
+              
+              
+            loadValues();
+          };
+      
+    </script>
+
+
 </body>
+
 </html>

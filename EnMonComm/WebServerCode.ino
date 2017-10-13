@@ -1,5 +1,5 @@
 static const char serverIndex[] PROGMEM =
-  R"(<html><body><form method='POST' action='' enctype='multipart/form-data'>
+  R"(<html><body>user:admin, pass: changa<br><form method='POST' action='' enctype='multipart/form-data'>
                   <input type='file' name='update'>
                   <input type='submit' value='Update'>
                </form>
@@ -8,7 +8,6 @@ static const char serverIndex[] PROGMEM =
          
 static const char successResponse[] PROGMEM = 
   "<META http-equiv=\"refresh\" content=\"60;url=/\">Update Success! Rebooting in 60 sec...\n";
-
 
 
 //format bytes
@@ -173,6 +172,8 @@ void handleFileList() {
 
 
 void webServerSetUp(){
+
+  static bool authenticated = false;
   
   server.reset(new ESP8266WebServer(WiFi.localIP(), 80));
 
@@ -257,6 +258,10 @@ void webServerSetUp(){
     });
     
     server->on("/update", HTTP_POST, [](){
+
+      if(!authenticated)
+        return server->requestAuthentication();
+               
       server->client().setNoDelay(true);
       server->sendHeader("Connection", "close");
       if (Update.hasError()){
@@ -268,7 +273,6 @@ void webServerSetUp(){
       }else{
         server->send_P(200, PSTR("text/html"), successResponse);        
       }
-
       server->client().stop();
       delay(3000);
       ESP.restart();
@@ -276,26 +280,33 @@ void webServerSetUp(){
         HTTPUpload& upload = server->upload();
         if(upload.status == UPLOAD_FILE_START){
           Serial.setDebugOutput(true);
+  
+          authenticated = server->authenticate("admin", "changa");
+          if(!authenticated){
+            Serial.println(F("Unauthenticated Update!"));
+            return;
+          }
+          
           WiFiUDP::stopAll();
           Serial.printf_P(PSTR("Update: %s\n"), upload.filename.c_str());
           uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
           if(!Update.begin(maxSketchSpace)){//start with max available size
             Update.printError(Serial);
           }
-        } else if(upload.status == UPLOAD_FILE_WRITE){
+        } else if(authenticated && upload.status == UPLOAD_FILE_WRITE){
           if(Update.write(upload.buf, upload.currentSize) != upload.currentSize){
             Update.printError(Serial);
           }
-        } else if(upload.status == UPLOAD_FILE_END){
+        } else if(authenticated && upload.status == UPLOAD_FILE_END){
           if(Update.end(true)){ //true to set the size to the current progress
             Serial.printf_P(PSTR("Update Success: %u\nRebooting...\n"), upload.totalSize);
           } else{
             Update.printError(Serial);
           }
-        } else if (upload.status == UPLOAD_FILE_ABORTED){
+        } else if (authenticated && upload.status == UPLOAD_FILE_ABORTED){
             Update.end();
             Serial.println(F("Update aborted!"));
-        } else {
+        } else if (authenticated){
           Serial.println(F("Unknown error!"));
           Update.printError(Serial);
         }

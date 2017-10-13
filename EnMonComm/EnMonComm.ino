@@ -6,7 +6,6 @@
 #include <SPI.h>
 #include <FS.h>
 #include <ESP8266WiFi.h>
-#include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>
 #include <ThingerWebConfig.h>
@@ -14,7 +13,6 @@
 #include <ESP8266mDNS.h>
 #include <ESP8266AVRISP.h>
 #include <NtpClientLib.h>
-//#include <TimeLib.h> 
 #include <Ticker.h>
 #include <SoftEasyTransfer.h>
 #include <SoftwareSerial.h>
@@ -28,10 +26,6 @@ std::unique_ptr<ESP8266WebServer> server;
 File fsUploadFile;
 
 ThingerWebConfig thing;
-
-//NTP variables
-//unsigned int localPort = 2390;      // local port to listen for UDP packets
-//WiFiUDP Udp;
 
 struct sample_struct{
   time_t timestamp;
@@ -115,40 +109,42 @@ void setup() {
       
   };
   
-//  outputValue(millis());
   thing["Energy[kW]"] >> [](pson& out){
       out["timestamp"] = sample.timestamp;
       out["phase 1"] = sample.phase1;
       out["phase 2"] = sample.phase2;
       out["phase 3"] = sample.phase3;
   };
-
-  histDataDnldControl = idle;
-  
-  webServerSetUp();
   
   thing.handle(); //workaround to setup WiFi connections
+  
+  histDataDnldControl = idle;
+
 //  setupOTA();
   setupAVRISP();
   NTP.begin();
-//  Udp.begin(localPort);
-//  setSyncInterval(6*SECS_PER_HOUR);
-//  setSyncProvider(getNtpTime);  
-//  now();
+
+  webServerSetUp();
   server->begin();
 
-  Serial.print("Free heap size: ");
+  Serial.print(F("Free heap size: "));
   Serial.println(String(ESP.getFreeHeap()));
 
-  Serial.print("Flash size: ");
+  Serial.print(F("Flash size: "));
   Serial.println(String(ESP.getFlashChipSize()));
 
-  Serial.print("SPIFFS size: ");
+  Serial.print(F("SPIFFS size: "));
   FSInfo fs_info;
   SPIFFS.begin();
   SPIFFS.info(fs_info);
   SPIFFS.end();
   Serial.println(fs_info.totalBytes);
+  Serial.print(F("TCP_MSS: "));
+#ifdef TCP_MSS
+  Serial.println(TCP_MSS);
+#else
+  Serial.println(F("unknown"));
+#endif
 }
 
 
@@ -159,12 +155,6 @@ void loop() {
 //  ArduinoOTA.handle();
   handleAVRISP();
   handleComm();
-
-//  if (timeStatus() == timeNotSet){
-//    time_t t = getNtpTime();
-//    if (t != 0)
-//      setTime(t);
-//  }
 
   if (millis() - histDataDnldFlowCtrl > histDataDnldFlowRate){
     histDataDnldFlowCtrl = millis();

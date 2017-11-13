@@ -498,10 +498,7 @@ void handleFileList() {
   if (!SPIFFS.begin())
     return server->send_P(404, PSTR("text/plain"), PSTR("NoFileSystem"));
 
-    
-  String path = server->arg("dir");
-  Dir dir = SPIFFS.openDir(path);
-  path = String();
+  Dir dir = SPIFFS.openDir(server->arg("dir"));
     
   String output = "[";
   while(dir.next())
@@ -558,24 +555,21 @@ void webServerSetUp(){
   //use it to load content from SPIFFS
   server->onNotFound([](){
     if(!handleFileRead(server->uri())){
-      server->sendHeader("Location", String("http://") + WiFi.localIP().toString());
+      server->sendHeader(F("Location"), String("http://") + WiFi.localIP().toString());
       server->send_P(302, PSTR("text/plain"), PSTR(""));
     }
   });  
 
   server->on("/allall", HTTP_GET, [](){
-    String json = "{";
-    json += "\"timestamp\":"+String(sample.timestamp);
-    json += ", \"phase1\":"+String(sample.phase1);
-    json += ", \"phase2\":"+String(sample.phase2);
-    json += ", \"phase3\":"+String(sample.phase3);
-    json += ", \"ntptime\":"+String(timeStatus()!=timeNotSet?now():0);
-    json += ", \"ssid\":"+String(WiFi.SSID());
-    json += ", \"ip\":"+String(WiFi.localIP().toString());
-    json += ", \"heap\":"+String(ESP.getFreeHeap());
+    String json; //= "{";
+    createJSON(json, &sample);
+    json.concat(F("{ \"ntptime\":")); json.concat(NTP.getTime());
+    json.concat(F(", \"ssid\":")); json.concat(WiFi.SSID());
+    json.concat(F(", \"free_heap\":")); json.concat(ESP.getFreeHeap());
+    json.concat(F(", \"compile_time\":")); json.concat(__TIME__ " "  __DATE__);
+    json.concat(F(", \"CommMD5\":")); json.concat(ESP.getSketchMD5());
     json += "}";
     server->send(200, F("text/json"), json);
-    json = String();
   }); 
 
   server->on("/all", HTTP_GET, [](){
@@ -592,15 +586,7 @@ void webServerSetUp(){
 //      ET.sendData();
   });  
 
-  server->on("/avrisp", HTTP_GET, [](){
-    String str = String(F("Use your avrdude: \"avrdude -c arduino -p <device> -P net:"));
-    str += WiFi.localIP().toString();
-    str += ":";
-    str += String(avrisp_port);
-    str += " -t # or -U ...\"";
-        
-    server->send(200, F("text/plain"), str);
-  });    
+   
 
   server->on("/reset", HTTP_GET, [](){
     server->send_P(200, PSTR("text/plain"), PSTR("web server will reset in 5 sec"));
@@ -630,10 +616,10 @@ void webServerSetUp(){
       server->sendHeader("Connection", "close");
       if (Update.hasError()){
           StreamString str;
-          String updaterError = String();
           Update.printError(str);
-          updaterError = str.c_str();
-        server->send(200, F("text/html"), String(F("Update error: ")) + updaterError);
+          String updaterError(F("Update error: "));
+          updaterError += str.c_str();
+        server->send(200, F("text/html"), updaterError);
       }else{
         server->send_P(200, PSTR("text/html"), successResponse);        
       }
@@ -658,12 +644,16 @@ void webServerSetUp(){
             Update.printError(Serial);
           }
         } else if(authenticated && upload.status == UPLOAD_FILE_WRITE){
+            
           if(Update.write(upload.buf, upload.currentSize) != upload.currentSize){
             Update.printError(Serial);
           }
+          else{
+            Serial.printf_P(PSTR("."));
+          }
         } else if(authenticated && upload.status == UPLOAD_FILE_END){
           if(Update.end(true)){ //true to set the size to the current progress
-            Serial.printf_P(PSTR("Update Success: %u\nRebooting...\n"), upload.totalSize);
+            Serial.printf_P(PSTR("\nUpdate Success: %u\nRebooting...\n"), upload.totalSize);
           } else{
             Update.printError(Serial);
           }

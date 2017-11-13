@@ -25,8 +25,6 @@ void setupAVRISP(){
     MDNS.addService("avrisp", "tcp", avrisp_port);  
     
     IPAddress local_ip = WiFi.localIP();
-    Serial.println(F("[AVRISP] AVRISP ready:"));
-    Serial.println(F("[AVRISP] Use your avrdude:"));
     Serial.print(F("[AVRISP] avrdude -c arduino -p <device> -P net:"));
     Serial.print(local_ip);
     Serial.print(":");

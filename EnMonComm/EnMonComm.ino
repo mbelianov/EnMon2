@@ -1,9 +1,8 @@
 //#define _DEBUG_
-//#define DEBUG_ESP_HTTP_SERVER
 #define _DISABLE_TLS_
 
 #include "OpCodes.h"
-#include <SPI.h>
+//#include <SPI.h>
 #include <FS.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
@@ -18,8 +17,7 @@
 #include <SoftwareSerial.h>
 #include "StreamString.h"
 
-Ticker ticker_on;
-Ticker ticker_off;
+Ticker ticker;
 int led_indicator = 16;
 
 std::unique_ptr<ESP8266WebServer> server;
@@ -55,29 +53,36 @@ enum {
 unsigned long histDataDnldFlowCtrl = 0;
 unsigned long histDataDnldFlowRate = 50; // 50 ms
 
-void tick_on(){
+unsigned long flip_period = 500;
+void flip_on(){
   digitalWrite(led_indicator, HIGH);
-  ticker_off.once_ms(75, [](){digitalWrite(led_indicator, LOW);});
+  ticker.once_ms(75, flip_off);
 }
+
+void flip_off(){
+   digitalWrite(led_indicator, LOW);
+   ticker.once_ms(flip_period, flip_on);
+}
+
 
 //gets called when WiFiManager enters configuration mode
 void configModeCallback (WiFiManager *myWiFiManager) {
-  ticker_on.attach(0.1, tick_on);  
+    flip_period = 100;
 }
 
 //gets called when WiFiManager connects to AP
 void connectedCallback () {
-  ticker_on.attach(2, tick_on);
+    flip_period = 2000;
 }
 
 void createJSON (String &str, const sample_struct* sample){
   
-    String json = "{";
+    String json("{");
 
-      json += "\"timestamp\":"+String(sample->timestamp);
-      json += ", \"phase1\":"+String(sample->phase1);
-      json += ", \"phase2\":"+String(sample->phase2);
-      json += ", \"phase3\":"+String(sample->phase3);
+      json.concat(F("\"timestamp\":"));json.concat(sample->timestamp);
+      json.concat(F(", \"phase1\":"));json.concat(sample->phase1);
+      json.concat(F(", \"phase2\":"));json.concat(sample->phase2);
+      json.concat(F(", \"phase3\":"));json.concat(sample->phase3);
     
     json += "}";
 
@@ -95,17 +100,19 @@ void setup() {
   ET.begin(details(data), &mySerial);
   
   pinMode(led_indicator, OUTPUT);
-  ticker_on.attach(0.5, tick_on);  
+ 
+   flip_on(); //start flipping
   
   thing.setAPCallback(configModeCallback);
   thing.setConnectedCallback(connectedCallback);
   
   // resource output
-  thing["ESP8266"] >> [](pson& out){
+  thing["ESP8266 Basic"] >> [](pson& out){
       out["UpTime"] = NTP.getUptimeString();
       out["CurrentNTPTime"] = NTP.getTimeDateString();
       out["LastSyncAt"] = NTP.getTimeDateString(NTP.getLastNTPSync());
       out["IP"]=WiFi.localIP().toString();
+      out["compile_time"] = __TIME__ " "  __DATE__;
       
   };
   
@@ -128,10 +135,10 @@ void setup() {
   server->begin();
 
   Serial.print(F("Free heap size: "));
-  Serial.println(String(ESP.getFreeHeap()));
+  Serial.println(ESP.getFreeHeap());
 
   Serial.print(F("Flash size: "));
-  Serial.println(String(ESP.getFlashChipSize()));
+  Serial.println(ESP.getFlashChipSize());
 
   Serial.print(F("SPIFFS size: "));
   FSInfo fs_info;
@@ -156,6 +163,7 @@ void loop() {
   handleAVRISP();
   handleComm();
 
+  
   if (millis() - histDataDnldFlowCtrl > histDataDnldFlowRate){
     histDataDnldFlowCtrl = millis();
     switch (histDataDnldControl){

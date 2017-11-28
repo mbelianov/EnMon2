@@ -1,9 +1,10 @@
 static const char serverIndex[] PROGMEM =
-  R"(<html><body>user:admin, pass: changa<br><form method='POST' action='' enctype='multipart/form-data'>
+  R"(<html><body>user:admin, pass: changa<br>
+              <form method='POST' action='' enctype='multipart/form-data'>
                   <input type='file' name='update'>
                   <input type='submit' value='Update'>
                </form>
-         </body></html>)";
+     </body></html>)";
 
          
 static const char successResponse[] PROGMEM = 
@@ -366,6 +367,15 @@ static const char edit_htm_gz[] PROGMEM = {
     0x86,0xfe,0x07,0x0f,0x7f,0x00,0xe2,0x4e,0xcc,0xc3,0xf1,0x61,0x00,0x00
     };
   
+
+
+bool web_event_log=false;
+void log_web_event(bool force_event_log = false){
+  if (!web_event_log && !force_event_log) return;
+  logger.notice(F("%s:%d:%s" CR),server->client().remoteIP().toString().c_str(), server->method(), server->uri().c_str());
+  thing.stream(thing["ESP8266 Log"]);
+}
+
 //format bytes
 String formatBytes(size_t bytes){
   if (bytes < 1024){
@@ -397,12 +407,9 @@ String getContentType(String filename){
 }
 
 bool handleFileRead(String path){
-
+  
   unsigned long s = millis();
   if(path.endsWith("/")) path += "index.htm";
-
-  Serial.print(F("[www] Reading file:"));
-  Serial.print(path);
   
   String contentType = getContentType(path);
   String pathWithGz = path + ".gz";
@@ -413,11 +420,10 @@ bool handleFileRead(String path){
     server->streamFile(file, contentType);
     file.close();
     SPIFFS.end() ;
-    Serial.print(F("...done in "));
-    Serial.println(millis()- s);
+    logger.trace(F("resource %s delivered for %l sec" CR), path.c_str(), millis()- s);
     return true;
   }
-  Serial.println(F("...not found"));
+  logger.trace(F("resource %s not found!" CR), path.c_str());
   return false;
 }
 
@@ -531,55 +537,73 @@ void webServerSetUp(){
 
   //SERVER INIT
   //list directory
-  server->on("/list", HTTP_GET, handleFileList);
+  server->on("/list", HTTP_GET, [](){
+    log_web_event();
+    handleFileList();
+  });
 
   server->on("/edit", HTTP_GET, [](){
-      Serial.print(F("[www] Trying to delivery PROGMEM content..."));
+      log_web_event();
       server->setContentLength(edit_htm_gz_len);
       server->sendHeader("Connection", "close");
       server->sendHeader("Content-Encoding", "gzip");
       server->send(200, "text/html");
       server->sendContent_P(edit_htm_gz, edit_htm_gz_len);
-      Serial.println(F("done!"));
   });  
 
   //create file
-  server->on("/edit", HTTP_PUT, handleFileCreate);
+  server->on("/edit", HTTP_PUT, [](){ 
+    log_web_event();
+    handleFileCreate();
+  });
   //delete file
-  server->on("/edit", HTTP_DELETE, handleFileDelete);
+  server->on("/edit", HTTP_DELETE, [](){
+    log_web_event();
+    handleFileDelete();
+  });
   //first callback is called after the request has ended with all parsed arguments
   //second callback handles file uploads at that location
-  server->on("/edit", HTTP_POST, [](){ server->send(200, F("text/plain"), ""); }, handleFileUpload);
+  server->on("/edit", HTTP_POST, [](){ log_web_event(); server->send(200, F("text/plain"), ""); }, handleFileUpload);
 
   //called when the url is not defined here
   //use it to load content from SPIFFS
   server->onNotFound([](){
+    log_web_event();
     if(!handleFileRead(server->uri())){
       server->sendHeader(F("Location"), String("http://") + WiFi.localIP().toString());
       server->send_P(302, PSTR("text/plain"), PSTR(""));
     }
   });  
 
+  server->on("/logwebevent",HTTP_GET, [](){
+    web_event_log = true;
+    log_web_event();
+    server->send_P(200, PSTR("text/plain"), PSTR("web event log on"));
+    
+  });
+
   server->on("/allall", HTTP_GET, [](){
     String json; //= "{";
     createJSON(json, &sample);
-    json.concat(F("{ \"ntptime\":")); json.concat(NTP.getTime());
+    json.concat(F("{ \"time\":")); json.concat(time(NULL));
     json.concat(F(", \"ssid\":")); json.concat(WiFi.SSID());
     json.concat(F(", \"free_heap\":")); json.concat(ESP.getFreeHeap());
     json.concat(F(", \"compile_time\":")); json.concat(__TIME__ " "  __DATE__);
     json.concat(F(", \"CommMD5\":")); json.concat(ESP.getSketchMD5());
     json += "}";
     server->send(200, F("text/json"), json);
+    logger.verbose(json.c_str());
   }); 
 
   server->on("/all", HTTP_GET, [](){
     String json; 
     createJSON(json, &sample);
     server->send(200, F("text/json"), json);
-    json = String();
+    logger.verbose(F("%s:%s" CR), server->client().remoteIP().toString().c_str(), json.c_str());   
   });
 
   server->on("/history", HTTP_GET, [](){
+      log_web_event();
       server->send(200, F("text/plain"), "");
       histDataDnldControl = start_download; //initiate download
 //      data.op = REQUEST | OP_HISTST;
@@ -588,13 +612,23 @@ void webServerSetUp(){
 
    
 
-  server->on("/reset", HTTP_GET, [](){
-    server->send_P(200, PSTR("text/plain"), PSTR("web server will reset in 5 sec"));
+  server->on("/reboot", HTTP_GET, [](){
+    log_web_event(true);
+    server->send_P(200, PSTR("text/plain"), PSTR("reboot in 5 sec"));
     delay(5000);
     ESP.reset();
   });
 
+  server->on("/reset", HTTP_GET, [](){
+    log_web_event(true);
+    server->send_P(200, PSTR("text/plain"), PSTR("credentials will be deleted. reset in 5 sec"));
+    clean_credentials();
+    delay(5000);
+    ESP.reset();
+  });  
+
   server->on("/avrreset", HTTP_GET, [](){
+    log_web_event();
     //pinMode(avr_reset_pin, OUTPUT);
     digitalWrite(avr_reset_pin, LOW);
     delay(10);
@@ -603,11 +637,13 @@ void webServerSetUp(){
   });
   
     server->on("/update", HTTP_GET, [](){
+      log_web_event();
       server->sendHeader("Connection", "close");
       server->send_P(200, PSTR("text/html"), serverIndex);
     });
     
     server->on("/update", HTTP_POST, [](){
+      log_web_event();
 
       if(!authenticated)
         return server->requestAuthentication();
@@ -619,7 +655,8 @@ void webServerSetUp(){
           Update.printError(str);
           String updaterError(F("Update error: "));
           updaterError += str.c_str();
-        server->send(200, F("text/html"), updaterError);
+          server->send(200, F("text/html"), updaterError);
+          logger.notice(updaterError.c_str());
       }else{
         server->send_P(200, PSTR("text/html"), successResponse);        
       }
@@ -629,44 +666,63 @@ void webServerSetUp(){
       },[](){
         HTTPUpload& upload = server->upload();
         if(upload.status == UPLOAD_FILE_START){
-          Serial.setDebugOutput(true);
+          //Serial.setDebugOutput(true);
   
           authenticated = server->authenticate("admin", "changa");
           if(!authenticated){
-            Serial.println(F("Unauthenticated Update!"));
+            logger.warning(F("Unauthenticated Update!" CR));
             return;
           }
           
           WiFiUDP::stopAll();
-          Serial.printf_P(PSTR("Update: %s\n"), upload.filename.c_str());
+          //Serial.printf_P(PSTR("Update: %s\n"), upload.filename.c_str());
+          logger.notice(F("Update: %s" CR), upload.filename.c_str());
           uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
           if(!Update.begin(maxSketchSpace)){//start with max available size
-            Update.printError(Serial);
+            StreamString str;
+            Update.printError(str);
+            logger.error(str.c_str());
+            //Update.printError(Serial);
           }
-        } else if(authenticated && upload.status == UPLOAD_FILE_WRITE){
-            
+        }
+        else if(authenticated && upload.status == UPLOAD_FILE_WRITE){
           if(Update.write(upload.buf, upload.currentSize) != upload.currentSize){
-            Update.printError(Serial);
+            StreamString str;
+            Update.printError(str);
+            logger.error(str.c_str());
+            //Update.printError(Serial);
           }
           else{
-            Serial.printf_P(PSTR("."));
+            //Serial.printf_P(PSTR("."));
           }
-        } else if(authenticated && upload.status == UPLOAD_FILE_END){
+        } 
+        else if(authenticated && upload.status == UPLOAD_FILE_END){
           if(Update.end(true)){ //true to set the size to the current progress
-            Serial.printf_P(PSTR("\nUpdate Success: %u\nRebooting...\n"), upload.totalSize);
-          } else{
-            Update.printError(Serial);
+            //Serial.printf_P(PSTR("\nUpdate Success: %u\nRebooting...\n"), upload.totalSize);
+            logger.notice(F("Update Success: %l" CR" Rebooting..." CR), upload.totalSize);
+          } 
+          else{
+            StreamString str;
+            Update.printError(str);
+            logger.error(str.c_str());            
+            //Update.printError(Serial);
           }
         } else if (authenticated && upload.status == UPLOAD_FILE_ABORTED){
             Update.end();
-            Serial.println(F("Update aborted!"));
+            logger.error(F("Update aborted!" CR));
         } else if (authenticated){
-          Serial.println(F("Unknown error!"));
-          Update.printError(Serial);
+          logger.error(F("Unknown error!" CR));
+          StreamString str;
+          Update.printError(str);
+          logger.error(str.c_str());           
+          //Serial.println(F("Unknown error!"));
+          //Update.printError(Serial);
         }
-        Serial.setDebugOutput(false);
+        //Serial.setDebugOutput(false);
      
         yield();
       });  
+
+      server->begin();
 }
 

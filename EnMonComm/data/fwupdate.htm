@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+    <script>
+       function UploadFirmware(oForm) {
+      	  var user = document.getElementById('user').value;
+      	  var pass = document.getElementById('password').value;
+      		var xhr = new XMLHttpRequest();
+      		xhr.onload = function(){
+      		    if (this.responseText.length === 0) return;
+              console.log(this.responseText);
+              document.getElementById('v').innerHTML = this.responseText;      		  
+      		};
+      		
+      		xhr.onerror = function (){
+              console.log(this.responseText);
+              alert("error");        		  
+      		  };
+      		if (1) {
+            xhr.onreadystatechange = function(){
+              if (xhr.readyState == 4){
+                if(xhr.status == 401) {
+                  alert("Authentication failure!");
+                  document.getElementById("p").value = 0;
+                  document.getElementById("v").innerHTML = "0%";
+                }
+              }
+            };
+      			// progress bar
+      			xhr.upload.addEventListener("progress", function(e) {
+        				var pc = parseInt((e.loaded / e.total * 100));
+        				document.getElementById("p").value = pc;
+        				document.getElementById("v").innerHTML = pc+"%";
+        			});
+      			// start upload
+      			xhr.open("post", oForm.action, true, user, pass)
+      			xhr.send(new FormData(oForm))
+      		}
+      	}    
+    </script>
+    <style></style>  
+</head>
+<body>
+    <form id="upload" method='POST' action='/update' enctype='multipart/form-data'
+        onsubmit="UploadFirmware(this); return false;">
+        <fieldset>
+            <input  type='file' name='update'>
+            <p>
+              user:<input  type='text' id='user' name='user'/>
+              pass:<input  type='password' id='password' name='password'/>
+            </p>
+            <input  type='submit' value='Update'>
+              progress:
+              <progress id='p' value='0' max='100'><span>0</span>%</progress>
+              <span id='v'>0%</span>
+        </fieldset>
+     </form>
+
+</body>
+</html>

@@ -12,14 +12,15 @@ void handleComm(){
         break;
       case OP_GETNTP:
         {
-          time_t t = NTP.getTime();//(timeStatus()!= timeNotSet?now():0);
+          time_t t = time(NULL);// NTP.getTime();//(timeStatus()!= timeNotSet?now():0);
           memcpy (ptrData,&t, sizeof(t)<= MAX_DATA_LENGTH?sizeof(t):MAX_DATA_LENGTH);
           ET.sendData();
         }
         break;
       case OP_IPADDR:
         {
-          uint32_t ip = (WiFi.status()==WL_CONNECTED?(uint32_t)WiFi.localIP():0);
+          //uint32_t ip = (WiFi.status()==WL_CONNECTED?(uint32_t)WiFi.localIP():0);
+          uint32_t ip = (uint32_t)WiFi.localIP() ;
           memcpy (ptrData,(void*)&ip, sizeof(ip)<= MAX_DATA_LENGTH?sizeof(ip):MAX_DATA_LENGTH);
           strncpy((char*)(ptrData+4), WiFi.SSID().c_str(), MAX_DATA_LENGTH > sizeof(ip)?MAX_DATA_LENGTH-sizeof(ip):0);
           if (MAX_DATA_LENGTH > sizeof(ip)) *(char*)(ptrData+MAX_DATA_LENGTH)=0;//terminate the string but do not destroy ip address

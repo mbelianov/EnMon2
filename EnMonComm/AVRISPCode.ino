@@ -23,15 +23,8 @@ void setupAVRISP(){
     avrprog.begin();  
   
     MDNS.addService("avrisp", "tcp", avrisp_port);  
-    
-    IPAddress local_ip = WiFi.localIP();
-    Serial.print(F("[AVRISP] avrdude -c arduino -p <device> -P net:"));
-    Serial.print(local_ip);
-    Serial.print(":");
-    Serial.print(avrisp_port);
-    Serial.println(F(" -t # or -U ..."));
-
-  
+    logger.notice(F("[AVRISP] avrdude -c arduino -p <device> -P net:%s:%l -t # or -U ..." CR), WiFi.localIP().toString().c_str(), avrisp_port);
+ 
 }
 
 void handleAVRISP() {
@@ -41,19 +34,17 @@ void handleAVRISP() {
     if (last_state != new_state) {
         switch (new_state) {
             case AVRISP_STATE_IDLE: {
-                Serial.println();
-                Serial.println(F("[AVRISP] now idle"));
+                logger.notice(F("[AVRISP] now idle" CR));
                 // Use the SPI bus for other purposes
                 break;
             }
             case AVRISP_STATE_PENDING: {
-                Serial.println(F("[AVRISP] connection pending"));
+                logger.notice(F("[AVRISP] connection pending" CR));
                 // Clean up your other purposes and prepare for programming mode
                 break;
             }
             case AVRISP_STATE_ACTIVE: {
-                Serial.println();
-                Serial.println(F("[AVRISP] programming mode"));
+                logger.notice(F("[AVRISP] programming mode" CR));
                 // Stand by for completion
                 break;
             }
@@ -62,7 +53,7 @@ void handleAVRISP() {
     }
     // Serve the client
     if (last_state != AVRISP_STATE_IDLE) {
-        if ((i++ % 4096) == 0) Serial.print(".");
+        if ((i++ % 4096) == 0) logger.notice(".");
         avrprog.serve();
     }
 }

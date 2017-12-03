@@ -37,7 +37,7 @@ class ArduinoLogger :  public Logging {
     //set callback to print wellcome msg when new log listener connects
     void setWellcomePrintFunction(WellcomePrintFunction wpf) {_wpf = wpf;}
 
-  
+    void changeLogLevel(int newLogLevel);  
 };
 
 ArduinoLogger::ArduinoLogger(int level, unsigned int port, unsigned int max_srv_cleints):Logging()
@@ -72,7 +72,7 @@ ArduinoLogger::~ArduinoLogger(){
 }
 
 
-void ArduinoLogger:: handle(){
+void ArduinoLogger::handle(){
 
   if (!server) return;
 
@@ -103,6 +103,11 @@ void ArduinoLogger:: handle(){
 
    begin(_level, &Serial, false);
 
+}
+
+void ArduinoLogger::changeLogLevel(int newLogLevel){
+  _level = newLogLevel;
+  begin(_level, &Serial, false);
 }
 #endif
 

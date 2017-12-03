@@ -43,7 +43,7 @@ uint32_t ts1;
 ////////////////////////////////////////////////////////
 
 const uint16_t log_listener_port = 2323;
-ArduinoLogger logger(LOG_LEVEL_VERBOSE, log_listener_port);
+ArduinoLogger logger(LOG_LEVEL_SILENT, log_listener_port);
 
 Ticker ticker;
 int led_indicator = 16;
@@ -264,16 +264,17 @@ void printWellcomeMsg(Print* p) {
 //print timestamp as prefix before each log msg or whenever current time is needed
 void printTimestamp(Print* p) {
   time(&_now);
-//  tm* tm = gmtime(&_now);
-//  p->print(tm->tm_year+1900);p->print('/');
-//  p->print(tm->tm_mon);p->print('/');
-//  p->print(tm->tm_mday);p->print(' ');
-//  p->print(tm->tm_hour);p->print(':');
-//  p->print(tm->tm_min);p->print(':');
-//  p->print(tm->tm_sec);p->print('>');
-//  p->print(' ');
-  p->print(_now);p->print('>');
+  tm* tm = localtime(&_now);
+  p->print('<');
+  p->print(tm->tm_year+1900);p->print('/');
+  p->print(tm->tm_mon+1);p->print('/');
+  p->print(tm->tm_mday);p->print(' ');
+  p->print(tm->tm_hour);p->print(':');
+  p->print(tm->tm_min);p->print(':');
+  p->print(tm->tm_sec);p->print('>');
   p->print(' ');
+//  p->print(ctime(&_now));p->print('>');
+//  p->print(' ');
 
 }
 

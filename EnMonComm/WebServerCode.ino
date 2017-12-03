@@ -635,6 +635,17 @@ void webServerSetUp(){
     digitalWrite(avr_reset_pin, HIGH);
     server->send_P(200, PSTR("text/plain"), PSTR("avr rest done!"));
   });
+
+  server->on("/setloglevel", HTTP_GET, [](){
+    log_web_event();
+    if (!server->hasArg("level")){
+      server->send_P(200, PSTR("text/plain"), PSTR("no log level set!"));
+      return;
+    }
+    int logLevel = server->arg("level").toInt();
+    logger.changeLogLevel(logLevel);
+    server->send_P(200, PSTR("text/plain"), PSTR("new log level set!"));
+  });  
   
     server->on("/update", HTTP_GET, [](){
       log_web_event();

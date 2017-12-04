@@ -273,9 +273,6 @@ void printTimestamp(Print* p) {
   p->print(tm->tm_min);p->print(':');
   p->print(tm->tm_sec);p->print('>');
   p->print(' ');
-//  p->print(ctime(&_now));p->print('>');
-//  p->print(' ');
-
 }
 
 String printTimestampAsString(){

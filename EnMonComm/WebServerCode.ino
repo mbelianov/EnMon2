@@ -529,11 +529,13 @@ void handleFileList() {
 
 }
 
-
+ESP8266HTTPUpdateServer httpUpdater;
 void webServerSetUp(){
 
   static bool authenticated = false;
   server.reset(new ESP8266WebServer(WiFi.localIP(), 80));
+  httpUpdater.setup(server.get());
+  
 
   //SERVER INIT
   //list directory
@@ -587,6 +589,7 @@ void webServerSetUp(){
     createJSON(json, &sample);
     json.concat(F("{ \"time\":")); json.concat(time(NULL));
     json.concat(F(", \"ssid\":")); json.concat(WiFi.SSID());
+    json.concat(F(", \"level\":")); json.concat(WiFi.RSSI());
     json.concat(F(", \"free_heap\":")); json.concat(ESP.getFreeHeap());
     json.concat(F(", \"compile_time\":")); json.concat(__TIME__ " "  __DATE__);
     json.concat(F(", \"CommMD5\":")); json.concat(ESP.getSketchMD5());
@@ -647,6 +650,7 @@ void webServerSetUp(){
     server->send_P(200, PSTR("text/plain"), PSTR("new log level set!"));
   });  
   
+/*
     server->on("/update", HTTP_GET, [](){
       log_web_event();
       server->sendHeader("Connection", "close");
@@ -677,7 +681,6 @@ void webServerSetUp(){
       },[](){
         HTTPUpload& upload = server->upload();
         if(upload.status == UPLOAD_FILE_START){
-          //Serial.setDebugOutput(true);
   
           authenticated = server->authenticate("admin", "changa");
           if(!authenticated){
@@ -732,7 +735,8 @@ void webServerSetUp(){
         //Serial.setDebugOutput(false);
      
         yield();
-      });  
+      });
+*/
 
       server->begin();
 }

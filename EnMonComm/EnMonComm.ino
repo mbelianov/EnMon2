@@ -12,6 +12,7 @@
 #include <FS.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPUpdateServer.h>
 #include <WiFiManager.h>
 #include <ThingerESP8266.h>
 #include <ThingerWebConfig.h> //included to use pson decoder and encoder
@@ -43,7 +44,7 @@ uint32_t ts1;
 ////////////////////////////////////////////////////////
 
 const uint16_t log_listener_port = 2323;
-ArduinoLogger logger(LOG_LEVEL_SILENT, log_listener_port);
+ArduinoLogger logger(LOG_LEVEL_NOTICE, log_listener_port);
 
 Ticker ticker;
 int led_indicator = 16;
@@ -166,8 +167,9 @@ void setup() {
       out["UpTime"] = printUpTimeAsString(uptime);
       out["Time"] = printTimestampAsString(); 
       out["IP"]=WiFi.localIP().toString();
-      out["compile_time"] = __TIME__ " "  __DATE__;
-      
+      out["ssid"] = WiFi.SSID();
+      out["level"]=WiFi.RSSI();
+      out["compile_time"] = __TIME__ " "  __DATE__;      
   };
 
   thing["ESP8266 Log"] >> [](pson& out){
@@ -196,6 +198,7 @@ void setup() {
   
   logger.notice(F("Free heap size: %l" CR), ESP.getFreeHeap());
   logger.notice(F("Flash size: %l" CR), ESP.getFlashChipSize());
+  logger.notice(F("Connected to %s! Signal level %d!" CR), WiFi.SSID().c_str(), WiFi.RSSI());
   
   FSInfo fs_info;
   SPIFFS.begin();
@@ -208,7 +211,9 @@ void setup() {
   logger.notice(F("TCP_MSS: unknown"));
 #endif
 
-  logger.trace(F("Setup routine completed!" CR));
+  logger.notice(F("Setup routine completed!" CR));
+
+  logger.changeLogLevel(LOG_LEVEL_SILENT);
 
 }
 
@@ -222,8 +227,7 @@ void loop() {
   handleAVRISP();
   handleComm();
   logger.handle();
-
-
+ 
   ts1 = millis();
   uptime += (ts1 - ts);
   ts = ts1;

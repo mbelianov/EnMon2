@@ -102,7 +102,6 @@ void ArduinoLogger::handle(){
         return;
 
    begin(_level, &Serial, false);
-
 }
 
 void ArduinoLogger::changeLogLevel(int newLogLevel){

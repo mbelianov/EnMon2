@@ -373,7 +373,7 @@ bool web_event_log=false;
 void log_web_event(bool force_event_log = false){
   if (!web_event_log && !force_event_log) return;
   logger.notice(F("%s:%d:%s" CR),server->client().remoteIP().toString().c_str(), server->method(), server->uri().c_str());
-  thing.stream(thing["ESP8266 Log"]);
+  thing->stream((*thing)["ESP8266 Log"]);
 }
 
 //format bytes
@@ -529,13 +529,9 @@ void handleFileList() {
 
 }
 
-ESP8266HTTPUpdateServer httpUpdater;
 void webServerSetUp(){
 
-  static bool authenticated = false;
   server.reset(new ESP8266WebServer(WiFi.localIP(), 80));
-  httpUpdater.setup(server.get());
-  
 
   //SERVER INIT
   //list directory
@@ -585,17 +581,34 @@ void webServerSetUp(){
   });
 
   server->on("/allall", HTTP_GET, [](){
-    String json; //= "{";
-    createJSON(json, &sample);
-    json.concat(F("{ \"time\":")); json.concat(time(NULL));
-    json.concat(F(", \"ssid\":")); json.concat(WiFi.SSID());
-    json.concat(F(", \"level\":")); json.concat(WiFi.RSSI());
-    json.concat(F(", \"free_heap\":")); json.concat(ESP.getFreeHeap());
-    json.concat(F(", \"compile_time\":")); json.concat(__TIME__ " "  __DATE__);
-    json.concat(F(", \"CommMD5\":")); json.concat(ESP.getSketchMD5());
-    json += "}";
-    server->send(200, F("text/json"), json);
-    logger.verbose(json.c_str());
+     DynamicJsonBuffer  jsonBuffer;
+     JsonObject& root = jsonBuffer.createObject();
+     root["time"] = time(NULL);
+     root["timestamp"] = sample.timestamp;
+     root["phase1"] = sample.phase1;
+     root["phase2"] = sample.phase2;
+     root["phase3"] = sample.phase3;
+     root["ssid"] = WiFi.SSID();
+     root["level"] = WiFi.RSSI();
+     root["free heap"] = ESP.getFreeHeap();
+     root["compile time"] = COMPDATE;
+     root["CommMD5"] = ESP.getSketchMD5();
+
+     StreamString ss;
+
+     root.printTo(ss);
+   
+//    String json; //= "{";
+//    createJSON(json, &sample);
+//    json.concat(F("{ \"time\":")); json.concat(time(NULL));
+//    json.concat(F(", \"ssid\":")); json.concat(WiFi.SSID());
+//    json.concat(F(", \"level\":")); json.concat(WiFi.RSSI());
+//    json.concat(F(", \"free_heap\":")); json.concat(ESP.getFreeHeap());
+//    json.concat(F(", \"compile_time\":")); json.concat(__TIME__ " "  __DATE__);
+//    json.concat(F(", \"CommMD5\":")); json.concat(ESP.getSketchMD5());
+//    json += "}";
+    server->send(200, F("text/json"), ss);
+    logger.verbose(ss.c_str());
   }); 
 
   server->on("/all", HTTP_GET, [](){
@@ -613,7 +626,13 @@ void webServerSetUp(){
 //      ET.sendData();
   });  
 
-   
+  server->on("/forceupdate", HTTP_GET, [](){
+    log_web_event(true);
+    server->send_P(200, PSTR("text/plain"), PSTR("Cheking for new FW. Watch serial port for detials..."));
+    delay(200);
+    writeParamsToSPIFFS();
+    IAS.callHome();
+  });   
 
   server->on("/reboot", HTTP_GET, [](){
     log_web_event(true);
@@ -624,10 +643,11 @@ void webServerSetUp(){
 
   server->on("/reset", HTTP_GET, [](){
     log_web_event(true);
-    server->send_P(200, PSTR("text/plain"), PSTR("credentials will be deleted. reset in 5 sec"));
-    clean_credentials();
-    delay(5000);
-    ESP.reset();
+    server->send_P(200, PSTR("text/plain"), PSTR("Configuration portal will be launched."));
+    String emty = "000000";
+    emty.toCharArray(IAS.config.devPass, 7);
+    IAS.writeConfig(true);
+    IAS.espRestart('C', "Going into Configuration Mode");
   });  
 
   server->on("/avrreset", HTTP_GET, [](){
@@ -650,94 +670,6 @@ void webServerSetUp(){
     server->send_P(200, PSTR("text/plain"), PSTR("new log level set!"));
   });  
   
-/*
-    server->on("/update", HTTP_GET, [](){
-      log_web_event();
-      server->sendHeader("Connection", "close");
-      server->send_P(200, PSTR("text/html"), serverIndex);
-    });
-    
-    server->on("/update", HTTP_POST, [](){
-      log_web_event();
-
-      if(!authenticated)
-        return server->requestAuthentication();
-               
-      server->client().setNoDelay(true);
-      server->sendHeader("Connection", "close");
-      if (Update.hasError()){
-          StreamString str;
-          Update.printError(str);
-          String updaterError(F("Update error: "));
-          updaterError += str.c_str();
-          server->send(200, F("text/html"), updaterError);
-          logger.notice(updaterError.c_str());
-      }else{
-        server->send_P(200, PSTR("text/html"), successResponse);        
-      }
-      server->client().stop();
-      delay(3000);
-      ESP.restart();
-      },[](){
-        HTTPUpload& upload = server->upload();
-        if(upload.status == UPLOAD_FILE_START){
-  
-          authenticated = server->authenticate("admin", "changa");
-          if(!authenticated){
-            logger.warning(F("Unauthenticated Update!" CR));
-            return;
-          }
-          
-          WiFiUDP::stopAll();
-          //Serial.printf_P(PSTR("Update: %s\n"), upload.filename.c_str());
-          logger.notice(F("Update: %s" CR), upload.filename.c_str());
-          uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-          if(!Update.begin(maxSketchSpace)){//start with max available size
-            StreamString str;
-            Update.printError(str);
-            logger.error(str.c_str());
-            //Update.printError(Serial);
-          }
-        }
-        else if(authenticated && upload.status == UPLOAD_FILE_WRITE){
-          if(Update.write(upload.buf, upload.currentSize) != upload.currentSize){
-            StreamString str;
-            Update.printError(str);
-            logger.error(str.c_str());
-            //Update.printError(Serial);
-          }
-          else{
-            //Serial.printf_P(PSTR("."));
-          }
-        } 
-        else if(authenticated && upload.status == UPLOAD_FILE_END){
-          if(Update.end(true)){ //true to set the size to the current progress
-            //Serial.printf_P(PSTR("\nUpdate Success: %u\nRebooting...\n"), upload.totalSize);
-            logger.notice(F("Update Success: %l" CR" Rebooting..." CR), upload.totalSize);
-          } 
-          else{
-            StreamString str;
-            Update.printError(str);
-            logger.error(str.c_str());            
-            //Update.printError(Serial);
-          }
-        } else if (authenticated && upload.status == UPLOAD_FILE_ABORTED){
-            Update.end();
-            logger.error(F("Update aborted!" CR));
-        } else if (authenticated){
-          logger.error(F("Unknown error!" CR));
-          StreamString str;
-          Update.printError(str);
-          logger.error(str.c_str());           
-          //Serial.println(F("Unknown error!"));
-          //Update.printError(Serial);
-        }
-        //Serial.setDebugOutput(false);
-     
-        yield();
-      });
-*/
-
       server->begin();
 }
 

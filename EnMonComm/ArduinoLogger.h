@@ -1,9 +1,22 @@
 //An attempt to create a generic logger class to use in my IoT projects
 //
-//
 //Author: Martin Belyanov
 //version: 0.1
 //date: 15.11.2017
+//
+// Available levels are:
+// LOG_LEVEL_SILENT
+// LOG_LEVEL_FATAL
+// LOG_LEVEL_ERROR
+// LOG_LEVEL_WARNING
+// LOG_LEVEL_NOTICE
+// LOG_LEVEL_TRACE
+// LOG_LEVEL_VERBOSE
+//
+// Note: if you want to fully remove all logging code, 
+//       uncomment #define DISABLE_LOGGING in Logging.h
+//       this will significantly reduce your project size
+//
 
 #ifndef ARDUINOLOGGER_H
 #define ARDUINOLOGGER_H
@@ -53,7 +66,7 @@ ArduinoLogger::ArduinoLogger(int level, unsigned int port, unsigned int max_srv_
       _max_srv_clients = 1; //currenlty only one listener is supported
       
       if (_tcp_port){
-        serverClients = (WiFiClient_p*)malloc(_max_srv_clients*sizeof(WiFiClient_p));
+        serverClients = (WiFiClient_p*)calloc(_max_srv_clients,sizeof(WiFiClient_p));
         if (serverClients){
           server = new WiFiServer(_tcp_port);
           server->begin();
@@ -83,7 +96,8 @@ void ArduinoLogger::handle(){
       if (!serverClients[i] || !serverClients[i]->status()){
         if(serverClients[i]) {
           serverClients[i]->stop();
-          free(serverClients[i]); 
+          free(serverClients[i]);
+          serverClients[i] = NULL; 
         }
         serverClients[i] = new WiFiClient(server->available());
         begin(_level, serverClients[i], false);
@@ -97,9 +111,10 @@ void ArduinoLogger::handle(){
     server->available().stop();
   }
 
-   for (int i = 0; i < _max_srv_clients; i++)
-     if (serverClients[i] && serverClients[i]->status())
+   for (int i = 0; i < _max_srv_clients; i++){
+      if (serverClients[i] && serverClients[i]->status())
         return;
+     }
 
    begin(_level, &Serial, false);
 }

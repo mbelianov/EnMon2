@@ -1,30 +1,31 @@
 /////////////////////////////////////////////////////////////////////////
-//WifiManager: ver. 0.12
+//IOTAppStory: 1.0.6
 //Thinger.io: ver. 2.7.2
-//ESP8266: ver 2.3.0 
+//ESP8266: ver 2.4.0-RC2
+
+#define APPNAME "EnMon"
+#define VERSION "V2.0.0-alpha"
+#define COMPDATE __DATE__ __TIME__
+#define MODEBUTTON 0
+
 
 
 #define _DISABLE_TLS_
 
-
+#include <IOTAppStory.h>
 #include "OpCodes.h"
-//#include <SPI.h>
 #include <FS.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
-#include <ESP8266HTTPUpdateServer.h>
-#include <WiFiManager.h>
 #include <ThingerESP8266.h>
-#include <ThingerWebConfig.h> //included to use pson decoder and encoder
-//#include <ArduinoOTA.h>
 #include <ESP8266mDNS.h>
 #include <ESP8266AVRISP.h>
-//#include <NtpClientLib.h>
 #include <Ticker.h>
 #include <SoftEasyTransfer.h>
 #include <SoftwareSerial.h>
 #include "StreamString.h"
 #include "ArduinoLogger.h"
+#include <ArduinoJson.h>
 
 ////////////////////////////////////////////////////////
 #include <time.h>
@@ -43,6 +44,10 @@ uint32_t ts;
 uint32_t ts1;
 ////////////////////////////////////////////////////////
 
+IOTAppStory IAS(APPNAME, VERSION, COMPDATE, MODEBUTTON);
+unsigned long callHomeEntry = 0;
+boolean firstBoot;
+
 const uint16_t log_listener_port = 2323;
 ArduinoLogger logger(LOG_LEVEL_NOTICE, log_listener_port);
 
@@ -53,12 +58,13 @@ bool server_running = false;
 std::unique_ptr<ESP8266WebServer> server;
 File fsUploadFile;
 
+const int _nrXF = 3;
+char* user      = "";
+char* device    = "";
+char* device_credential = "";
 
-char user[40];
-char device[40];
-char device_credential[40];
-//ThingerWebConfig thing;
-ThingerESP8266 thing(user, device, device_credential);
+//ThingerESP8266 thing(user, device, device_credential);
+ThingerESP8266* thing;
 
 struct sample_struct{
   time_t timestamp;
@@ -133,13 +139,8 @@ void createJSON (String &str, const sample_struct* sample){
 
 void setup() {
   ts = millis();
-  Serial.begin(115200);
-//  Serial.setDebugOutput(true);
+  IAS.serialdebug(true,115200);    
 
-  while (millis() - ts < 500) { //need to wait a bit to bring up the serial port...
-    yield();
-  }
-  
   pinMode(led_indicator, OUTPUT);
   flip_on(); //start flipping  
   
@@ -153,7 +154,30 @@ void setup() {
   e2 = WiFi.onStationModeDisconnected(onSTADisconnected);
   e3 = WiFi.onStationModeConnected(onSTAConnected);
   //e4 = WiFi.onStationModeDHCPTimeout(onDHCPTimeout);
-  connectSTA();
+
+  // on first boot params should loaded from SPIFFS
+  firstBoot = false;
+  if(String(IAS.config.compDate) != String(COMPDATE)){
+    firstBoot = true;
+  }
+
+  IAS.preSetConfig(String(APPNAME) + ESP.getChipId(), false);
+  //IAS.preSetConfig("msb-wifi2", "belianovi", false);
+  IAS.addField(user, "user", "User", 16);
+  IAS.addField(device, "device", "Device", 16);
+  IAS.addField(device_credential, "credentials", "Device Credentials", 40);
+  IAS.begin(true);
+  if (firstBoot){
+    logger.notice(F("First boot. Loading params from SPIFFS." CR));
+    loadParamsFromSPIFFS();
+    IAS.writeConfig(true);
+  }
+ 
+//  logger.notice(F("User: %s" CR), user);
+//  logger.notice(F("Device: %s" CR), device);
+//  logger.notice(F("Device Credentials: %s" CR), device_credential); 
+  
+  thing = new ThingerESP8266(user, device, device_credential);
 
   configTime(TZ_SEC, DST_SEC, "pool.ntp.org", "time.nist.gov");    
     
@@ -163,16 +187,16 @@ void setup() {
 
   
   // resource output
-  thing["ESP8266 Basic"] >> [](pson& out){
+  (*thing)["ESP8266 Basic"] >> [](pson& out){
       out["UpTime"] = printUpTimeAsString(uptime);
       out["Time"] = printTimestampAsString(); 
       out["IP"]=WiFi.localIP().toString();
       out["ssid"] = WiFi.SSID();
       out["level"]=WiFi.RSSI();
-      out["compile_time"] = __TIME__ " "  __DATE__;      
+      out["compile_time"] = COMPDATE;      
   };
 
-  thing["ESP8266 Log"] >> [](pson& out){
+  (*thing)["ESP8266 Log"] >> [](pson& out){
       out["time"] = printTimestampAsString();
       out["free_heap"]=ESP.getFreeHeap();
       out["client_ip"]=server->client().remoteIP().toString();
@@ -180,7 +204,7 @@ void setup() {
       out["uri"]=server->uri();
   };  
   
-  thing["Energy[kW]"] >> [](pson& out){
+  (*thing)["Energy[kW]"] >> [](pson& out){
       out["timestamp"] = sample.timestamp;
       out["phase 1"] = sample.phase1;
       out["phase 2"] = sample.phase2;
@@ -189,7 +213,6 @@ void setup() {
 
   histDataDnldControl = idle;
 
-//  setupOTA();
   setupAVRISP();
   webServerSetUp();
 
@@ -208,22 +231,22 @@ void setup() {
 #ifdef TCP_MSS
   logger.notice(F("TCP_MSS: %l" CR),TCP_MSS);
 #else
-  logger.notice(F("TCP_MSS: unknown"));
+  logger.notice(F("TCP_MSS: unknown" CR));
 #endif
 
+  //writeParamsToSPIFFS();
   logger.notice(F("Setup routine completed!" CR));
 
-  logger.changeLogLevel(LOG_LEVEL_SILENT);
+  logger.changeLogLevel(LOG_LEVEL_ERROR);
 
 }
 
 
 
 void loop() {
-
-  if (WiFi.isConnected()) thing.handle();
+//  IAS.buttonLoop();    // this routine handles the reaction of the MODEBUTTON pin. If short press (<4 sec): update of sketch, long press (>7 sec): Configuration
+  if (WiFi.isConnected()) thing->handle();
   server->handleClient();
-//  ArduinoOTA.handle();
   handleAVRISP();
   handleComm();
   logger.handle();
@@ -231,6 +254,13 @@ void loop() {
   ts1 = millis();
   uptime += (ts1 - ts);
   ts = ts1;
+
+
+  if (ts1 - callHomeEntry > 2*3600*1000) {      // only for development. Please change it to at least 2 hours in production
+    writeParamsToSPIFFS(); // need to save params to SPIFFS otherwise they will be lost during firmware upgrade
+    IAS.callHome();
+    callHomeEntry = ts1;
+  }  
 
 
 //  if (ts1 % 4096 == 0){
@@ -295,111 +325,80 @@ String printUpTimeAsString(time_t t){
   return s;
 }
 
-#define CONFIG_FILE "/config.pson"
-#define DEVICE_SSID "Thinger-Device"
-#define DEVICE_PSWD "thinger.io"
 
-void connectSTA(){
-  bool thingerCredentials = false;
+void writeParamsToSPIFFS(){
+  String n("/");
+  n.concat(APPNAME);
+  n.concat(".params");
+  String param("parameter");
 
-  
-        logger.notice(F("Setting up WiFi connection..." CR));
-        if (SPIFFS.begin()) {
-            logger.trace(F("FS Mounted!" CR));
-            if (SPIFFS.exists(CONFIG_FILE)) {
-                //file exists, reading and loading
-                logger.trace(F("Opening config file..." CR));
-                File configFile = SPIFFS.open(CONFIG_FILE, "r");
-                if(configFile){
-                    logger.trace(F("Config file open!" CR));
-                    pson_spiffs_decoder decoder(configFile);
-                    pson config;
-                    decoder.decode(config);
-                    configFile.close();
-
-                    logger.notice(F("Config file decoded!" CR));
-                    strcpy(user, config["user"]);
-                    strcpy(device, config["device"]);
-                    strcpy(device_credential, config["credential"]);
-
-                    thingerCredentials = true;
-
-                    logger.verbose(F("User: %s" CR), user);
-                    logger.verbose(F("Device: %s" CR), device);
-                    logger.verbose(F("Credential: %s" CR), device_credential);
-                }else{
-                    logger.notice(F("Config file %s not available!" CR), CONFIG_FILE);
-                }
-            }
-            // close SPIFFS
-            SPIFFS.end();
-        } else {
-             logger.fatal(F("Failed to mount FS!" CR));
-        }
-
-        // initialize wifi manager
-        WiFiManager wifiManager;
-        wifiManager.setTimeout(180);
-        wifiManager.setDebugOutput(false);
-
-        // define additional wifi parameters
-        WiFiManagerParameter user_parameter("user", "User Id", user, 40);
-        WiFiManagerParameter device_parameter("device", "Device Id", device, 40);
-        WiFiManagerParameter credential_parameter("credential", "Device Credential", device_credential, 40);
-        wifiManager.addParameter(&user_parameter);
-        wifiManager.addParameter(&device_parameter);
-        wifiManager.addParameter(&credential_parameter);  
-        
-        logger.notice(F("Starting Webconfig..." CR));
-        bool wifiConnected = thingerCredentials ?
-                           wifiManager.autoConnect(DEVICE_SSID, DEVICE_PSWD) :
-                           wifiManager.startConfigPortal(DEVICE_SSID, DEVICE_PSWD);
-
-        if (!wifiConnected) {
-            logger.notice(F("Failed to connect! Resetting..." CR));
-            delay(3000);
-            ESP.reset();
-        }
-        
-        logger.notice(F("Connected!" CR));
-        WiFi.enableAP(false);
-        //read updated parameters
-        strcpy(user, user_parameter.getValue());
-        strcpy(device, device_parameter.getValue());
-        strcpy(device_credential, credential_parameter.getValue());
-
-        logger.notice(F("Updating Device Info..." CR));
-        if (SPIFFS.begin()) {
-            File configFile = SPIFFS.open(CONFIG_FILE, "w");
-            if (configFile) {
-                pson config;
-                config["user"] = (const char *) user;
-                config["device"] = (const char *) device;
-                config["credential"] = (const char *) device_credential;
-                pson_spiffs_encoder encoder(configFile);
-                encoder.encode(config);
-                configFile.close();
-                logger.notice(F("Device info updated!" CR));
-            } else {
-                logger.notice(F("Failed to open config file for writing!" CR));
-            }
-            SPIFFS.end();
-        }  
-}
-
-void clean_credentials(){
-    logger.trace(F("Cleaning credentials..." CR));
-    if(SPIFFS.begin()) {
-        if (SPIFFS.exists(CONFIG_FILE)) {
-            if(SPIFFS.remove(CONFIG_FILE)){
-              ;
-            }else{
-                logger.warning(F("Cannot delete config file!"));
-            }
-        }else{
-            ;
-        }
-        SPIFFS.end();
+  SPIFFS.begin();
+  File paramFile = SPIFFS.open(n, "w");
+  if (paramFile){
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& root = jsonBuffer.createObject();
+    root["App"] = APPNAME;
+    JsonArray& list = root.createNestedArray("parameters");
+    for (unsigned int i = 0; i < _nrXF; i++){
+        list.add((*IAS.fieldStruct[i].varPointer));
     }
+
+    root.printTo(paramFile);
+    paramFile.close();
+    logger.notice(F("Params successfuly witten to SPIFFS!" CR));
+    root.prettyPrintTo(Serial);
+  }
+  else 
+    logger.error(F("---> Unable to write params to SPIFFS!!!" CR));
+
+  SPIFFS.end();
 }
+
+
+void loadParamsFromSPIFFS(){
+  String n("/");
+  n.concat(APPNAME);
+  n.concat(".params");
+
+  SPIFFS.begin();
+  File paramFile = SPIFFS.open(n, "r");
+  if (paramFile){
+    size_t size = paramFile.size();
+    std::unique_ptr<char[]> buf (new char[size]);
+    paramFile.readBytes(buf.get(), size);
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& root = jsonBuffer.parseObject(buf.get());
+
+    if (!root.success()){
+      logger.error(F("---> Unable to parse params file!" CR));
+    }
+    else{
+      const char * app = root["App"];
+      if (!app || (strcmp(APPNAME, app) != 0)){
+        logger.error(F("---> Unknown param file!" CR));
+        return;
+      }
+      JsonArray& list = root["parameters"];      
+      if (list.size() != _nrXF){
+        logger.error(F("---> Number of params in file is different than expected!" CR));
+      }
+      else{
+        logger.notice(F("Found %d parameters:" CR), list.size());
+        for (unsigned int i = 0; i<list.size(); i++){
+          String p = list[i];
+          logger.notice(F("%s" CR), p.c_str());
+          strncpy(*IAS.fieldStruct[i].varPointer, p.c_str(), IAS.fieldStruct[i].length);
+        }
+        logger.notice(F("Params successfuly loaded from SPIFFS!" CR));
+      }
+    }
+    paramFile.close();
+  }
+  else 
+    logger.error(F("---> Unable to read params file from SPIFFS!!!" CR));
+
+  SPIFFS.end();  
+}
+
+
 

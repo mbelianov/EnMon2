@@ -1,7 +1,33 @@
 <!DOCTYPE html>
 <html>
-<head></head>
-<body>
+<head>
+  <script src="https://cdn.rawgit.com/google/code-prettify/master/loader/run_prettify.js"></script>
+</head>
+
+<body onload="setTimeout(loadValues, 500)">
+  <script> 
+        function loadValues(){
+            var xh = new XMLHttpRequest();
+            var txt = "";
+            xh.onreadystatechange = function(){
+              if (xh.readyState == 4 && xh.status == 200){
+                    var res = JSON.parse(xh.responseText);
+                    txt += "<table>"
+                    for (x in res) {
+                        txt += "<tr><td>" + x + " : " + res[x]+ "</td></tr>";
+                    }
+                    txt += "</table>"   
+                    
+                    document.getElementById("info").innerHTML = txt;
+              }
+            };
+            xh.open("GET", "/allall", true);
+            xh.send(null);
+        };
+        
+  
+  </script>
+
   <input type="button" onclick="location.href='/logwebevent';" value="Log Web Events" />
   Log level:
   <input type="button" onclick="location.href='/setloglevel?level=0';" value="Silent" />
@@ -12,10 +38,15 @@
   <input type="button" onclick="location.href='/setloglevel?level=5';" value="Trace" />
   <input type="button" onclick="location.href='/setloglevel?level=6';" value="Verbose" /><br>
 
+  <input type="button" onclick="location.href='/allall;" value="Info" />  
   <input type="button" onclick="location.href='/forceupdate';" value="ESP8266 FW Update" />
   <input type="button" onclick="location.href='/avrisp.htm';" value="AVR ISP" />  
   <input type="button" onclick="location.href='/avrreset';" value="AVR Reset" />  
   <input type="button" onclick="location.href='/reset';" value="Reset and Register in IOTAPPStory.com" /> 
+  <pre class="prettyprint">
+    Info  status: <br>
+    <span id="info"></span>
+  </pre>
 
 </body>
 </html>

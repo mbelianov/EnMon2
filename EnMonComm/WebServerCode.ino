@@ -583,6 +583,8 @@ void webServerSetUp(){
   server->on("/allall", HTTP_GET, [](){
      DynamicJsonBuffer  jsonBuffer;
      JsonObject& root = jsonBuffer.createObject();
+     root["AppName"] = APPNAME;
+     root["Version"] = VERSION;
      root["time"] = time(NULL);
      root["timestamp"] = sample.timestamp;
      root["phase1"] = sample.phase1;
@@ -593,6 +595,7 @@ void webServerSetUp(){
      root["free heap"] = ESP.getFreeHeap();
      root["compile time"] = COMPDATE;
      root["CommMD5"] = ESP.getSketchMD5();
+    
 
      StreamString ss;
 

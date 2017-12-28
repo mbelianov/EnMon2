@@ -4,7 +4,7 @@
 //ESP8266: ver 2.4.0-RC2
 
 #define APPNAME "EnMon"
-#define VERSION "V2.0.1-RC1"
+#define VERSION "V2.0.2-RC1"
 #define COMPDATE __DATE__ __TIME__
 #define MODEBUTTON 0
 
@@ -193,8 +193,11 @@ void setup() {
       out["IP"]=WiFi.localIP().toString();
       out["ssid"] = WiFi.SSID();
       out["level"]=WiFi.RSSI();
-      out["compile_time"] = COMPDATE;      
+      out["compile_time"] = COMPDATE;    
+      out["AppName"] = APPNAME;
+      out["Version"] = VERSION;  
   };
+  
 
   (*thing)["ESP8266 Log"] >> [](pson& out){
       out["time"] = printTimestampAsString();

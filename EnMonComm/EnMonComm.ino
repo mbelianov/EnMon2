@@ -4,7 +4,7 @@
 //ESP8266: ver 2.4.0-RC2
 
 #define APPNAME "EnMon"
-#define VERSION "V2.0.2-RC1"
+#define VERSION "V2.0.2"
 #define COMPDATE __DATE__ __TIME__
 #define MODEBUTTON 0
 

@@ -4,11 +4,10 @@
 //ESP8266: ver 2.4.0-RC2
 
 #define APPNAME "EnMon"
-#define VERSION "V2.0.2"
-#define COMPDATE __DATE__ __TIME__
+//Version 2.1.0 will focus on logging capabilities
+#define VERSION "V2.1.0-RC1"
+#define COMPDATE __DATE__" " __TIME__
 #define MODEBUTTON 0
-
-
 
 #define _DISABLE_TLS_
 
@@ -31,9 +30,7 @@
 #include <time.h>
 #define TZ              0       // (utc+) TZ in hours
 #define DST_MN          0       // use 60mn for summer time in some countries
-
 #define NTP0_OR_LOCAL1  0       // 0:use NTP  1:fake external RTC
-
 #define TZ_MN           ((TZ)*60)
 #define TZ_SEC          ((TZ)*3600)
 #define DST_SEC         ((DST_MN)*60)
@@ -50,6 +47,7 @@ boolean firstBoot;
 
 const uint16_t log_listener_port = 2323;
 ArduinoLogger logger(LOG_LEVEL_NOTICE, log_listener_port);
+Ticker log_ticker;
 
 Ticker ticker;
 int led_indicator = 16;
@@ -95,14 +93,19 @@ unsigned long histDataDnldFlowCtrl = 0;
 unsigned long histDataDnldFlowRate = 50; // 50 ms
 
 unsigned long flip_period = 500;
+bool flip_invert = true;
 void flip_on(){
-  digitalWrite(led_indicator, HIGH);
+  digitalWrite(led_indicator, (true && !flip_invert)); // HIGH
   ticker.once_ms(75, flip_off);
 }
 
 void flip_off(){
-   digitalWrite(led_indicator, LOW);
+   digitalWrite(led_indicator, (false || flip_invert)); //LOW
    ticker.once_ms(flip_period, flip_on);
+}
+
+void processLogger(){
+    logger.handle();
 }
 
 
@@ -139,23 +142,26 @@ void createJSON (String &str, const sample_struct* sample){
 
 void setup() {
   ts = millis();
-  IAS.serialdebug(true,115200);    
-
-  pinMode(led_indicator, OUTPUT);
-  flip_on(); //start flipping  
-  
-  logger.setWellcomePrintFunction(printWellcomeMsg);
-  logger.setPrefix(printTimestamp);
-  logger.notice(F("Booting..." CR));
-    
   //set up event handlers...
   static WiFiEventHandler e1, e2, e3, e4;
   e1 = WiFi.onStationModeGotIP(onSTAGotIP);
   e2 = WiFi.onStationModeDisconnected(onSTADisconnected);
   e3 = WiFi.onStationModeConnected(onSTAConnected);
-  //e4 = WiFi.onStationModeDHCPTimeout(onDHCPTimeout);
+  e4 = WiFi.onStationModeDHCPTimeout(onDHCPTimeout);
+  
+  Serial.begin(115200);
+  logger.begin(LOG_LEVEL_NOTICE, &Serial, false);
+  logger.notice(F("Booting..." CR));
+  
 
-  // on first boot params should loaded from SPIFFS
+  pinMode(led_indicator, OUTPUT);
+  flip_on(); //start flipping       
+  
+  flip_invert = false;
+  
+  IAS.serialdebug(false,115200);    
+ 
+  // on first boot params should be loaded from SPIFFS
   firstBoot = false;
   if(String(IAS.config.compDate) != String(COMPDATE)){
     firstBoot = true;
@@ -168,14 +174,10 @@ void setup() {
   IAS.addField(device_credential, "credentials", "Device Credentials", 40);
   IAS.begin(true);
   if (firstBoot){
-    logger.notice(F("First boot. Loading params from SPIFFS." CR));
+    logger.notice(F("First boot. Trying to load params from SPIFFS..." CR));
     loadParamsFromSPIFFS();
     IAS.writeConfig(true);
   }
- 
-//  logger.notice(F("User: %s" CR), user);
-//  logger.notice(F("Device: %s" CR), device);
-//  logger.notice(F("Device Credentials: %s" CR), device_credential); 
   
   thing = new ThingerESP8266(user, device, device_credential);
 
@@ -237,7 +239,8 @@ void setup() {
   logger.notice(F("TCP_MSS: unknown" CR));
 #endif
 
-  //writeParamsToSPIFFS();
+  
+  logger.setPrefix(printTimestamp);
   logger.notice(F("Setup routine completed!" CR));
 
   logger.changeLogLevel(LOG_LEVEL_ERROR);
@@ -259,7 +262,7 @@ void loop() {
   ts = ts1;
 
 
-  if (ts1 - callHomeEntry > 2*3600*1000) {      // only for development. Please change it to at least 2 hours in production
+  if (ts1 - callHomeEntry > 2*3600*1000) {
     writeParamsToSPIFFS(); // need to save params to SPIFFS otherwise they will be lost during firmware upgrade
     IAS.callHome();
     callHomeEntry = ts1;

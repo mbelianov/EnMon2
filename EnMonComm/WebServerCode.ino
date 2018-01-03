@@ -420,7 +420,7 @@ bool handleFileRead(String path){
     server->streamFile(file, contentType);
     file.close();
     SPIFFS.end() ;
-    logger.trace(F("resource %s delivered for %l sec" CR), path.c_str(), millis()- s);
+    logger.trace(F("resource %s delivered for %l msec" CR), path.c_str(), millis()- s);
     return true;
   }
   logger.trace(F("resource %s not found!" CR), path.c_str());
@@ -596,29 +596,27 @@ void webServerSetUp(){
      root["compile time"] = COMPDATE;
      root["CommMD5"] = ESP.getSketchMD5();
     
-
      StreamString ss;
-
      root.printTo(ss);
-   
-//    String json; //= "{";
-//    createJSON(json, &sample);
-//    json.concat(F("{ \"time\":")); json.concat(time(NULL));
-//    json.concat(F(", \"ssid\":")); json.concat(WiFi.SSID());
-//    json.concat(F(", \"level\":")); json.concat(WiFi.RSSI());
-//    json.concat(F(", \"free_heap\":")); json.concat(ESP.getFreeHeap());
-//    json.concat(F(", \"compile_time\":")); json.concat(__TIME__ " "  __DATE__);
-//    json.concat(F(", \"CommMD5\":")); json.concat(ESP.getSketchMD5());
-//    json += "}";
+
     server->send(200, F("text/json"), ss);
-    logger.verbose(ss.c_str());
+    logger.verbose(F("%s" CR),ss.c_str());
   }); 
 
   server->on("/all", HTTP_GET, [](){
-    String json; 
-    createJSON(json, &sample);
-    server->send(200, F("text/json"), json);
-    logger.verbose(F("%s:%s" CR), server->client().remoteIP().toString().c_str(), json.c_str());   
+     StaticJsonBuffer<150>  jb;
+     JsonObject& r = jb.createObject();
+     r["timestamp"] = sample.timestamp;
+     r["phase1"] = sample.phase1;
+     r["phase2"] = sample.phase2;
+     r["phase3"] = sample.phase3;
+    
+     StreamString ss;
+     r.printTo(ss);
+
+     server->send(200, F("text/json"), ss);
+
+     logger.verbose(F("%s:%s" CR), server->client().remoteIP().toString().c_str(), ss.c_str());   
   });
 
   server->on("/history", HTTP_GET, [](){

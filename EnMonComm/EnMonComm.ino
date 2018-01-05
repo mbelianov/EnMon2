@@ -1,11 +1,11 @@
 /////////////////////////////////////////////////////////////////////////
 //IOTAppStory: 1.0.6
 //Thinger.io: ver. 2.7.2
-//ESP8266: ver 2.4.0-RC2
+//ESP8266: ver 2.4.0
 
 #define APPNAME "EnMon"
-//Version 2.1.0 will focus on logging capabilities
-#define VERSION "V2.1.0-RC1"
+//Version 2.1.1 - upgrade to ESP8266 2.4.0
+#define VERSION "V2.1.1-RC1"
 #define COMPDATE __DATE__" " __TIME__
 #define MODEBUTTON 0
 

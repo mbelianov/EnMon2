@@ -5,7 +5,7 @@
 
 #define APPNAME "EnMon"
 //Version 2.1.1 - upgrade to ESP8266 2.4.0
-#define VERSION "V2.1.1-RC1"
+#define VERSION "V2.1.1-RC2"
 #define COMPDATE __DATE__" " __TIME__
 #define MODEBUTTON 0
 
@@ -40,6 +40,11 @@ time_t uptime;
 uint32_t ts;
 uint32_t ts1;
 ////////////////////////////////////////////////////////
+
+//watch dog timer for lost IP connection
+unsigned long connectedSince;
+const unsigned long lostConnectionTimeout = 20*60*1000L;
+
 
 IOTAppStory IAS(APPNAME, VERSION, COMPDATE, MODEBUTTON);
 unsigned long callHomeEntry = 0;
@@ -239,6 +244,7 @@ void setup() {
   logger.notice(F("TCP_MSS: unknown" CR));
 #endif
 
+  connectedSince = millis();
   
   logger.setPrefix(printTimestamp);
   logger.notice(F("Setup routine completed!" CR));
@@ -248,10 +254,17 @@ void setup() {
 }
 
 
-
 void loop() {
 //  IAS.buttonLoop();    // this routine handles the reaction of the MODEBUTTON pin. If short press (<4 sec): update of sketch, long press (>7 sec): Configuration
-  if (WiFi.isConnected()) thing->handle();
+  if (WiFi.isConnected()){
+    connectedSince = millis();
+    thing->handle();
+  }
+  
+  if ((millis() - connectedSince) > lostConnectionTimeout)
+    ESP.reset(); //we have no valid IP addrress since quite a whike. So reset.
+
+    
   server->handleClient();
   handleAVRISP();
   handleComm();
